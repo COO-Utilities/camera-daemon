@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "camera-daemon"
+version = "0.1.0"
+description = "Generic libby camera daemon service for camerad cameras"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+# libby is absent on purpose: the service takes a keyword registry it is handed,
+# so it never imports a transport
+dependencies = [
+  "pycamerad@git+https://github.com/COO-Utilities/pycamerad.git",
+]
+authors = [
+  { name = "Caltech Optical Observatories" }
+]
+
+[project.urls]
+Repository = "https://github.com/COO-Utilities/camera-daemon"
+"Bug Tracker" = "https://github.com/COO-Utilities/camera-daemon/issues"
+
+[project.optional-dependencies]
+dev = ["pylint", "pytest"]
+
+[tool.setuptools]
+packages = ["camera_daemon"]
