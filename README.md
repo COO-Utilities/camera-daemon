@@ -65,9 +65,11 @@ object reads `self.daemon.camera`, needing no knowledge of the service.
 |---|---|---|
 | `state` | string | R |
 | `isconnected` | bool | R |
-| `isopen` | bool | R |
+| `isopen` | bool | R/W |
 | `ispowered` | bool | R/W |
 | `initialize` | trigger | W |
+| `loadfirmware` | trigger | W |
+| `readacf` | trigger | W |
 | `exptime` | float, s | R/W |
 | `nframes` | int | R/W |
 | `datacube` | bool | R/W |
@@ -90,3 +92,39 @@ served. Hardware initialisation happens only through the `initialize` trigger.
 
 `initialize` gets a 300 second timeout, since it opens the controller, loads
 firmware and powers the detector.
+
+The three steps are separable, which matters for a cryostat. Writing `isopen`
+opens the link alone, enough to read module-specific keywords such as
+temperatures with the detector unpowered. `loadfirmware` writes the ACF to the
+controller without powering it, which a keyword write needs, since a write
+patches a single configuration line and the controller has to hold the
+configuration camerad parsed. `readacf` parses the ACF into the host without
+writing the controller, for recovering after a restart when the controller is
+already configured.
+
+## Bias and heaterX
+
+`BiasService` and `HeaterService` are separate, and composed the same way. They
+are Archon-specific, and every channel is declared in the host's config, so no
+module number or label is assumed:
+
+```yaml
+biases:
+  - {module: 9, channel: 4, keyword: hvxbiasoutputdraina}
+  - {module: 4, channel: 28, keyword: lvxbiasccdplus5v, maxvolts: 5.0}
+heaters:
+  - {module: 11, channel: A, keyword: heaterxdetheater}
+sensors:
+  - {module: 11, channel: A, keyword: heaterxdettemp}
+```
+
+Each bias channel gets its voltage, order, label, enable and current limit.
+Which attributes a channel actually has depends on its bank, so `enable` and
+`ilim` are nullable and read null where the bank carries none. `minvolts` and
+`maxvolts` are optional; a write past either is refused before it reaches the
+controller.
+
+A bias write applies that module alone and never the whole system, so it does
+not disturb the detector's power. The controller does refuse to apply a bias
+change while the detector is unpowered, so a write needs power on to take
+effect.

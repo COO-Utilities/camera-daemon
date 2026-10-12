@@ -67,7 +67,10 @@ class CameraService:
                       description="Camera object exists for this config.")
         registry.bool("isopen",
                       getter=lambda: self._isopen,
-                      description="Controller connection has been opened.")
+                      setter=self._set_open,
+                      description="Controller connection is open. Write to open "
+                                  "or close it, which reads the configuration "
+                                  "without applying it or changing power.")
         registry.bool("ispowered",
                       getter=self._is_powered,
                       setter=self._set_powered,
@@ -76,6 +79,15 @@ class CameraService:
                          action=self._initialize,
                          timeout_s=INITIALIZE_TIMEOUT_S,
                          description="Open, load firmware and power on.")
+        registry.trigger("loadfirmware",
+                         action=self._load_firmware,
+                         timeout_s=INITIALIZE_TIMEOUT_S,
+                         description="Load the ACF into the controller, leaving power off.")
+        registry.trigger("readacf",
+                         action=self._read_acf,
+                         timeout_s=INITIALIZE_TIMEOUT_S,
+                         description="Read the ACF into the host only, for recovering "
+                                     "after a restart without rewriting the controller.")
         registry.float("exptime",
                        getter=self._get_exptime,
                        setter=self._set_exptime,
@@ -140,6 +152,43 @@ class CameraService:
 
     def _set_powered(self, value: bool) -> None:
         self._require_camera().power(bool(value))
+
+    def _set_open(self, value: bool) -> None:
+        """Open or close the controller link, without configuring it.
+
+        Opening reads the controller's module inventory, which is what the
+        module-specific keywords need; it writes nothing and leaves the
+        detector as it is.
+        """
+        camera = self._require_camera()
+        with self._command_lock:
+            if value:
+                camera.open()
+                self._isopen = True
+                self._run.state = STATE_IDLE
+            else:
+                camera.close()
+                self._isopen = False
+
+    def _load_firmware(self) -> None:
+        """Load the configured ACF into the controller, leaving power off.
+
+        Writes the configuration the controller then runs, so the keyword
+        writes that patch a single line address the same lines camerad parsed.
+        """
+        camera = self._require_camera()
+        with self._command_lock:
+            camera.load()
+
+    def _read_acf(self) -> None:
+        """Parse the ACF into the host without writing to the controller.
+
+        For recovering after a restart, when the controller already holds the
+        configuration and should not be rewritten.
+        """
+        camera = self._require_camera()
+        with self._command_lock:
+            camera.read_acf()
 
     def _initialize(self) -> None:
         camera = self._require_camera()

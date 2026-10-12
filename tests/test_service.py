@@ -12,6 +12,7 @@ from camera_daemon import CameraService, STATE_IDLE, STATE_NOCAMERA
 
 GENERIC_KEYWORDS = {
     "state", "isconnected", "isopen", "ispowered", "initialize",
+    "loadfirmware", "readacf",
     "exptime", "nframes", "datacube", "expose", "abort", "lastframe",
 }
 
@@ -34,6 +35,24 @@ class FakeCamera:
     def __init__(self, config_file):
         self.config_file = config_file
         self.closed = False
+        self.calls = []
+
+    def open(self):
+        """Record that the controller link was opened."""
+        self.calls.append("open")
+
+    def load(self, firmware=""):
+        """Record a firmware load, which writes the controller."""
+        self.calls.append(f"load {firmware}".strip())
+
+    def read_acf(self, firmware=""):
+        """Record a host-only ACF read, which writes nothing."""
+        self.calls.append(f"read_acf {firmware}".strip())
+
+    def power(self, on=""):
+        """Record a power change."""
+        self.calls.append(f"power {on}".strip())
+        return "ON" if on == "on" else "OFF"
 
     @classmethod
     def from_config(cls, config_file):
@@ -125,3 +144,36 @@ def test_on_stop_releases_a_built_camera():
     service.connect()
     service.on_stop()
     assert host.camera.closed
+
+
+def _service_with_camera():
+    host = FakeHost({"camera.config_file": "/etc/cam.cfg"}, FakeInstrument())
+    service = CameraService(host)
+    service.register_keywords(host.keyword_registry)
+    service.connect()
+    return host, service
+
+
+def test_opening_does_not_configure_or_power_the_controller():
+    host, _ = _service_with_camera()
+    host.keyword_registry.registered["isopen"]["setter"](True)
+    assert host.camera.calls == ["open"]
+
+
+def test_closing_releases_the_link():
+    host, _ = _service_with_camera()
+    host.keyword_registry.registered["isopen"]["setter"](True)
+    host.keyword_registry.registered["isopen"]["setter"](False)
+    assert host.camera.closed
+
+
+def test_loadfirmware_writes_the_controller_without_powering_it():
+    host, _ = _service_with_camera()
+    host.keyword_registry.registered["loadfirmware"]["action"]()
+    assert host.camera.calls == ["load"]
+
+
+def test_readacf_writes_nothing_to_the_controller():
+    host, _ = _service_with_camera()
+    host.keyword_registry.registered["readacf"]["action"]()
+    assert host.camera.calls == ["read_acf"]

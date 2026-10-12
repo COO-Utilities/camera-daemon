@@ -1,5 +1,7 @@
 """Generic libby camera daemon service for camerad cameras."""
 
+from .bias import BiasService
+from .heater import HeaterService
 from .service import (
     INITIALIZE_TIMEOUT_S,
     STATE_ABORTING,
@@ -11,7 +13,9 @@ from .service import (
 )
 
 __all__ = [
+    "BiasService",
     "CameraService",
+    "HeaterService",
     "INITIALIZE_TIMEOUT_S",
     "STATE_ABORTING",
     "STATE_ERROR",
