@@ -8,13 +8,10 @@ Setpoints are in degrees C while sensor readings are in K, as the firmware
 reports them.
 """
 
-import time
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, List
 
-# Live readings come from STATUS, which reports every module in one reply, so
-# hold it long enough that polling a module's keywords costs one command
-STATUS_TTL_S = 0.5
+from .status import reader_for
 
 ON_VALUES = ("on", "1", "true")
 
@@ -49,8 +46,7 @@ class HeaterService:
         self.host = host
         self.heaters: List[Channel] = []
         self.sensors: List[Channel] = []
-        self._status: Dict[str, str] = {}
-        self._status_read_at = 0.0
+        self.status = reader_for(host)
 
     @property
     def camera(self) -> Any:
@@ -81,7 +77,7 @@ class HeaterService:
 
     def _check(self, channel: Channel, key: str) -> None:
         try:
-            self._status_value(key, float)
+            self.status.value(key, float)
         except (RuntimeError, OSError, ValueError) as exc:
             self.host.logger.error("Declared channel %s unreadable: %s",
                                    channel.keyword, exc)
@@ -91,7 +87,7 @@ class HeaterService:
         where = f"module {heater.module}{heater.channel}"
         registry.float(name,
                        getter=lambda h=heater: self._target(h),
-                       setter=lambda value, h=heater: self._heater(h, str(float(value))),
+                       setter=lambda value, h=heater: self._set_heater(h, str(float(value))),
                        units="C",
                        description=f"Heater setpoint, {where}.")
         registry.bool(f"{name}enable",
@@ -100,11 +96,11 @@ class HeaterService:
                       description=f"Closed loop is running, {where}.")
         registry.string(f"{name}input",
                         getter=lambda h=heater: self._heater(h, "INPUT"),
-                        setter=lambda value, h=heater: self._heater(h, f"INPUT {value}"),
+                        setter=lambda value, h=heater: self._set_heater(h, f"INPUT {value}"),
                         description="Sensor this heater controls on, A, B or C.")
         registry.float(f"{name}ilim",
                        getter=lambda h=heater: float(self._heater(h, "ILIM")),
-                       setter=lambda value, h=heater: self._heater(h, f"ILIM {float(value)}"),
+                       setter=lambda value, h=heater: self._set_heater(h, f"ILIM {float(value)}"),
                        units="mA",
                        description="Heater current limit.")
         registry.float(f"{name}output",
@@ -119,18 +115,18 @@ class HeaterService:
     def _register_sensor(self, registry: Any, sensor: Channel) -> None:
         name = sensor.keyword
         registry.float(name,
-                       getter=lambda s=sensor: self._status_value(
+                       getter=lambda s=sensor: self.status.value(
                            f"{s.status_prefix}/TEMP{s.channel}", float),
                        units="K",
                        description=f"Temperature, module {sensor.module}{sensor.channel}.")
         registry.float(f"{name}current",
                        getter=lambda s=sensor: float(self._sensor(s)),
-                       setter=lambda value, s=sensor: self._sensor(s, str(int(value))),
+                       setter=lambda value, s=sensor: self._set_sensor(s, str(int(value))),
                        units="nA",
                        description="RTD excitation current.")
         registry.int(f"{name}filter",
                      getter=lambda s=sensor: int(self._sensor(s, "AVG")),
-                     setter=lambda value, s=sensor: self._sensor(s, f"AVG {int(value)}"),
+                     setter=lambda value, s=sensor: self._set_sensor(s, f"AVG {int(value)}"),
                      description="Digital averaging count, a power of two up to 256.")
 
     def _require_camera(self) -> Any:
@@ -153,30 +149,22 @@ class HeaterService:
     def _enabled(self, heater: Channel) -> bool:
         return self._heater(heater).split()[0].lower() in ON_VALUES
 
+    def _set_heater(self, heater: Channel, args: str) -> None:
+        """Write a heater field, dropping the readings the change invalidates."""
+        self._heater(heater, args)
+        self.status.invalidate()
+
+    def _set_sensor(self, sensor: Channel, args: str) -> None:
+        """Write a sensor field, dropping the readings the change invalidates."""
+        self._sensor(sensor, args)
+        self.status.invalidate()
+
     def _set_enabled(self, heater: Channel, value: bool) -> None:
-        self._heater(heater, "on" if value else "off")
+        self._set_heater(heater, "on" if value else "off")
 
     def _heater_status(self, heater: Channel, field: str, cast: Any) -> Any:
-        return self._status_value(
+        return self.status.value(
             f"{heater.status_prefix}/HEATER{heater.channel}{field}", cast)
-
-    def _status_value(self, key: str, cast: Any) -> Any:
-        """Return one STATUS field, reading the whole reply in one command."""
-        value = self._read_status().get(key)
-        if value is None:
-            raise RuntimeError(f"{key} not in the controller status")
-        return cast(value)
-
-    def _read_status(self) -> Dict[str, str]:
-        now = time.monotonic()
-        if self._status and now - self._status_read_at < STATUS_TTL_S:
-            return self._status
-
-        reply = self._require_camera().native("STATUS")
-        self._status = dict(field.split("=", 1)
-                            for field in reply.split() if "=" in field)
-        self._status_read_at = now
-        return self._status
 
 
 def _channels(declared: Any) -> List[Channel]:

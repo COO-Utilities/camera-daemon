@@ -118,13 +118,29 @@ sensors:
   - {module: 11, channel: A, keyword: heaterxdettemp}
 ```
 
-Each bias channel gets its voltage, order, label, enable and current limit.
+Each bias channel gets seven keywords, named after the columns of the archongui
+bias table:
+
+| keyword | GUI column | |
+|---|---|---|
+| `<name>` | Vset | commanded volts, writable |
+| `<name>vmeas` | Vmeas | measured volts |
+| `<name>iset` | Iset | current limit, writable |
+| `<name>imeas` | Imeas | measured current |
+| `<name>order` `<name>enable` `<name>label` | | configuration |
+
 Which attributes a channel actually has depends on its bank, so `enable` and
-`ilim` are nullable and read null where the bank carries none. `minvolts` and
+`iset` are nullable and read null where the bank carries none. `minvolts` and
 `maxvolts` are optional; a write past either is refused before it reaches the
 controller.
 
-A bias write applies that module alone and never the whole system, so it does
-not disturb the detector's power. The controller does refuse to apply a bias
-change while the detector is unpowered, so a write needs power on to take
-effect.
+The commanded keywords report what the board was told, which is not what it is
+doing: a bias write applies that module alone and never the whole system, so it
+does not disturb the detector's power, but the controller refuses the change
+while the detector is unpowered and the commanded value moves anyway. The
+measured keywords are what to trust, and what to plot.
+
+Measured values come from one `STATUS` reply, shared by both services through
+`StatusReader` and held for half a second, so reading every keyword of a daemon
+costs the controller one command. Any write drops the snapshot, so a read after
+a write never answers from before it.
