@@ -10,12 +10,20 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+from .status import reader_for
+
 # "MOD3 chan 2 HVLC V=24.0 ORDER=1 ENABLE=1 IL=20.0 LABEL="Output Drain""
 _FIELD = re.compile(r'(\w+)=("[^"]*"|\S+)')
 
 # One reply carries every field of a channel, so hold it long enough that
 # polling the keywords of one channel costs one command rather than five
 CACHE_TTL_S = 0.5
+
+# STATUS indexes each bank from the bank's own first channel, not by the
+# channel number, so a measurement needs the offset within its bank
+BANK_FIRST_CHANNEL = {"LVLC": 1, "LVHC": 25,
+                      "HVLC": 1, "HVHC": 25,
+                      "XVP": 1, "XVN": 5}
 
 
 @dataclass(frozen=True)
@@ -42,7 +50,9 @@ class BiasService:
     def __init__(self, host: Any) -> None:
         self.host = host
         self.channels: List[BiasChannel] = []
+        self.status = reader_for(host)
         self._cache: Dict[Tuple[int, int], Tuple[float, Dict[str, str]]] = {}
+        self._banks: Dict[Tuple[int, int], str] = {}
 
     @property
     def camera(self) -> Any:
@@ -88,12 +98,22 @@ class BiasService:
                       setter=lambda value, c=channel: self._write(c, "ENABLE", int(bool(value))),
                       nullable=True,
                       description="Channel is enabled, null where its bank has no switch.")
-        registry.float(f"{name}ilim",
+        registry.float(f"{name}iset",
                        getter=lambda c=channel: self._optional(c, "IL", float),
                        setter=lambda value, c=channel: self._write(c, "IL", float(value)),
                        units="mA",
                        nullable=True,
                        description="Current limit, null where its bank has none.")
+        # What the rail is doing, as against what the keywords above report,
+        # which is what it was told to do whether or not the board accepted it
+        registry.float(f"{name}vmeas",
+                       getter=lambda c=channel: self._measured(c, "V"),
+                       units="V",
+                       description=f"Measured bias voltage, module {c_label(channel)}.")
+        registry.float(f"{name}imeas",
+                       getter=lambda c=channel: self._measured(c, "I"),
+                       units="mA",
+                       description=f"Measured bias current, module {c_label(channel)}.")
 
     def verify(self) -> None:
         """Warn about any declared channel the controller does not report."""
@@ -117,6 +137,9 @@ class BiasService:
 
         reply = self.camera.bias(f"{channel.module} {channel.channel}")
         fields = {name: value.strip('"') for name, value in _FIELD.findall(reply)}
+        bank = _bank_of(reply)
+        if bank is not None:
+            self._banks[key] = bank
         self._cache[key] = (time.monotonic(), fields)
         return fields
 
@@ -137,11 +160,39 @@ class BiasService:
             raise RuntimeError("no camera; bias keywords need a controller")
         self.camera.bias(f"{channel.module} {channel.channel} {field} {value}")
         self._cache.pop((channel.module, channel.channel), None)
+        self.status.invalidate()
 
     def _optional(self, channel: BiasChannel, field: str, cast: Any) -> Any:
         """Return a field this channel's bank may not carry, else None."""
         value: Optional[str] = self._read(channel).get(field)
         return None if value is None else cast(value)
+
+    def _measured(self, channel: BiasChannel, field: str) -> float:
+        """Return a measured value of a channel, from the shared STATUS reply."""
+        return self.status.value(self._status_key(channel, field), float)
+
+    def _status_key(self, channel: BiasChannel, field: str) -> str:
+        """Return the STATUS key carrying one measurement of a channel."""
+        bank = self._bank(channel)
+        first = BANK_FIRST_CHANNEL.get(bank)
+        if first is None:
+            raise RuntimeError(f"{channel.keyword} is in unknown bias bank {bank}")
+        index = channel.channel - first + 1
+        return f"MOD{channel.module}/{bank}_{field}{index}"
+
+    def _bank(self, channel: BiasChannel) -> str:
+        """Return the bank the controller puts a channel in."""
+        self._read(channel)  # names the bank, which a channel never changes
+        bank = self._banks.get((channel.module, channel.channel))
+        if bank is None:
+            raise RuntimeError(f"{channel.keyword} reported no bias bank")
+        return bank
+
+
+def _bank_of(reply: str) -> Optional[str]:
+    """Return the bank named in a bias reply, ahead of its fields."""
+    return next((token for token in reply.split()
+                 if token in BANK_FIRST_CHANNEL), None)
 
 
 def _optional_float(value: Any) -> Optional[float]:

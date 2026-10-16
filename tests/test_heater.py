@@ -145,6 +145,14 @@ def test_a_sensor_current_round_trips():
     assert host.camera.writes == ["11 A 5000"]
 
 
+def test_a_write_drops_the_snapshot_so_the_next_read_is_not_stale():
+    host, registry = _service()
+    registry.registered["detheateroutput"]["getter"]()
+    registry.registered["detheater"]["setter"](-105.0)
+    registry.registered["detheateroutput"]["getter"]()
+    assert host.camera.status_reads == 2
+
+
 def test_a_missing_camera_is_reported_rather_than_crashing():
     host = FakeHost({"heaters": [HEATER], "sensors": []}, None)
     registry = FakeRegistry()
