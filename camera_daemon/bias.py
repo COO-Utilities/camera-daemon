@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-from .status import reader_for
+from .status import APPLY_TIMEOUT_S, reader_for
 
 # "MOD3 chan 2 HVLC V=24.0 ORDER=1 ENABLE=1 IL=20.0 LABEL="Output Drain""
 _FIELD = re.compile(r'(\w+)=("[^"]*"|\S+)')
@@ -80,6 +80,7 @@ class BiasService:
         registry.float(name,
                        getter=lambda c=channel: self._field(c, "V", float),
                        setter=lambda value, c=channel: self._write(c, "V", float(value)),
+                       timeout_s=APPLY_TIMEOUT_S,
                        validator=lambda value, c=channel: _check_volts(c, value),
                        units="V",
                        description=f"Bias voltage, module {c_label(channel)}."
@@ -87,6 +88,7 @@ class BiasService:
         registry.int(f"{name}order",
                      getter=lambda c=channel: self._field(c, "ORDER", int),
                      setter=lambda value, c=channel: self._write(c, "ORDER", int(value)),
+                     timeout_s=APPLY_TIMEOUT_S,
                      description=f"Power-on order, module {c_label(channel)}.")
         registry.string(f"{name}label",
                         getter=lambda c=channel: self._field(c, "LABEL", str),
@@ -96,11 +98,13 @@ class BiasService:
         registry.bool(f"{name}enable",
                       getter=lambda c=channel: self._optional(c, "ENABLE", lambda v: bool(int(v))),
                       setter=lambda value, c=channel: self._write(c, "ENABLE", int(bool(value))),
+                      timeout_s=APPLY_TIMEOUT_S,
                       nullable=True,
                       description="Channel is enabled, null where its bank has no switch.")
         registry.float(f"{name}iset",
                        getter=lambda c=channel: self._optional(c, "IL", float),
                        setter=lambda value, c=channel: self._write(c, "IL", float(value)),
+                       timeout_s=APPLY_TIMEOUT_S,
                        units="mA",
                        nullable=True,
                        description="Current limit, null where its bank has none.")

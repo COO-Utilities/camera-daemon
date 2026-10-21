@@ -11,7 +11,7 @@ reports them.
 from dataclasses import dataclass
 from typing import Any, List
 
-from .status import reader_for
+from .status import APPLY_TIMEOUT_S, reader_for
 
 ON_VALUES = ("on", "1", "true")
 
@@ -88,21 +88,24 @@ class HeaterService:
         registry.float(name,
                        getter=lambda h=heater: self._target(h),
                        setter=lambda value, h=heater: self._set_heater(h, str(float(value))),
+                       timeout_s=APPLY_TIMEOUT_S,
                        units="C",
                        description=f"Heater setpoint, {where}.")
         registry.bool(f"{name}enable",
                       getter=lambda h=heater: self._enabled(h),
                       setter=lambda value, h=heater: self._set_enabled(h, value),
+                      timeout_s=APPLY_TIMEOUT_S,
                       description=f"Closed loop is running, {where}.")
         registry.string(f"{name}input",
                         getter=lambda h=heater: self._heater(h, "INPUT"),
                         setter=lambda value, h=heater: self._set_heater(h, f"INPUT {value}"),
+                        timeout_s=APPLY_TIMEOUT_S,
                         description="Sensor this heater controls on, A, B or C.")
         registry.float(f"{name}ilim",
                        getter=lambda h=heater: float(self._heater(h, "ILIM")),
                        setter=lambda value, h=heater: self._set_heater(h, f"ILIM {float(value)}"),
-                       units="mA",
-                       description="Heater current limit.")
+                       timeout_s=APPLY_TIMEOUT_S,
+                       description="Integral limit of the loop.")
         registry.float(f"{name}output",
                        getter=lambda h=heater: self._heater_status(h, "OUTPUT", float),
                        units="V",
@@ -117,16 +120,18 @@ class HeaterService:
         registry.float(name,
                        getter=lambda s=sensor: self.status.value(
                            f"{s.status_prefix}/TEMP{s.channel}", float),
-                       units="K",
+                       units="C",
                        description=f"Temperature, module {sensor.module}{sensor.channel}.")
         registry.float(f"{name}current",
                        getter=lambda s=sensor: float(self._sensor(s)),
                        setter=lambda value, s=sensor: self._set_sensor(s, str(int(value))),
+                       timeout_s=APPLY_TIMEOUT_S,
                        units="nA",
                        description="RTD excitation current.")
         registry.int(f"{name}filter",
                      getter=lambda s=sensor: int(self._sensor(s, "AVG")),
                      setter=lambda value, s=sensor: self._set_sensor(s, f"AVG {int(value)}"),
+                     timeout_s=APPLY_TIMEOUT_S,
                      description="Digital averaging count, a power of two up to 256.")
 
     def _require_camera(self) -> Any:

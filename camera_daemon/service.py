@@ -74,6 +74,7 @@ class CameraService:
         registry.bool("ispowered",
                       getter=self._is_powered,
                       setter=self._set_powered,
+                      timeout_s=INITIALIZE_TIMEOUT_S,
                       description="Detector power is on.")
         registry.trigger("initialize",
                          action=self._initialize,

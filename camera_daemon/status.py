@@ -11,6 +11,9 @@ from typing import Any, Dict
 # enough that nothing STATUS reports can move measurably within it
 TTL_S = 0.5
 
+# A module write ends in an APPLYMOD, up to 3 s on LRIS2, past the RPC default
+APPLY_TIMEOUT_S = 30.0
+
 
 class StatusReader:
     """One STATUS snapshot, refreshed on demand."""

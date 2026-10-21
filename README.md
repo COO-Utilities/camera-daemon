@@ -90,8 +90,9 @@ A camera that is absent, unreachable or uninitialised does not stop the daemon:
 `connect()` logs the failure and `state` stays `nocamera`, so keywords are still
 served. Hardware initialisation happens only through the `initialize` trigger.
 
-`initialize` gets a 300 second timeout, since it opens the controller, loads
-firmware and powers the detector.
+`initialize` and `ispowered` get a 300 second timeout, since they load firmware
+or power the detector. Bias, heater and sensor writes get 30 seconds, since each
+ends in an `APPLYMOD`.
 
 The three steps are separable, which matters for a cryostat. Writing `isopen`
 opens the link alone, enough to read module-specific keywords such as
