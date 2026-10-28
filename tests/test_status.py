@@ -6,7 +6,7 @@
 
 import pytest
 
-from camera_daemon.status import StatusReader, reader_for
+from camera_daemon.archon.status import StatusReader, frame_reader_for, reader_for
 
 STATUS_REPLY = "VALID=1 MOD4/LVHC_V1=4.998 MOD4/LVHC_I1=-15.588"
 
@@ -63,3 +63,10 @@ def test_a_missing_camera_is_reported_rather_than_crashing():
     reader = StatusReader(BareHost(None))
     with pytest.raises(RuntimeError, match="no camera"):
         reader.value("VALID", int)
+
+
+def test_the_frame_reader_is_separate_from_the_status_reader():
+    host = BareHost(CountingCamera())
+    assert frame_reader_for(host) is frame_reader_for(host)
+    assert frame_reader_for(host) is not reader_for(host)
+    assert frame_reader_for(host).command == "FRAME"

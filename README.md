@@ -103,11 +103,19 @@ configuration camerad parsed. `readacf` parses the ACF into the host without
 writing the controller, for recovering after a restart when the controller is
 already configured.
 
-## Bias and heaterX
+## Archon services
 
-`BiasService` and `HeaterService` are separate, and composed the same way. They
-are Archon-specific, and every channel is declared in the host's config, so no
-module number or label is assumed:
+`camera_daemon.archon` holds the services that speak Archon commands, each
+composed the same way as `CameraService`:
+
+```python
+from camera_daemon.archon import BiasService, ChassisService, FrameService, HeaterService
+```
+
+### Bias and heaterX
+
+`BiasService` and `HeaterService` declare every channel in the host's config,
+so no module number or label is assumed:
 
 ```yaml
 biases:
@@ -145,3 +153,25 @@ Measured values come from one `STATUS` reply, shared by both services through
 `StatusReader` and held for half a second, so reading every keyword of a daemon
 costs the controller one command. Any write drops the snapshot, so a read after
 a write never answers from before it.
+
+### Chassis and frame buffers
+
+`ChassisService` serves the chassis health from `STATUS`: `valid`,
+`powergood`, `overheat`, `extclkpresent`, `powerstate`, `statuscount`,
+`logcount`, `backplanetemp`, `fantach`, and `rail<name>v` / `rail<name>i` for
+each of the twelve backplane rails. Module boards are declared, since which
+slots are filled differs per chassis:
+
+```yaml
+chassis:
+  modules: [1, 2, 3, 5, 6, 9, 10, 11, 12]   # mod<n>temp
+  dinputs: [11, 12]                         # mod<n>dinput0 .. mod<n>dinput7
+```
+
+`FrameService` serves the frame buffers from `FRAME`: `framerbuf`,
+`framewbuf`, `frametimer`, and for each of the three buffers
+`buf<n>complete`, `buf<n>frame`, `buf<n>sample`, `buf<n>width`,
+`buf<n>height`, `buf<n>pixels` and `buf<n>lines`. It has its own reader, held
+for half a second like the `STATUS` one.
+
+Neither needs the ACF loaded or the detector powered, only the link open.
