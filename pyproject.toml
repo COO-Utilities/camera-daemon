@@ -26,4 +26,4 @@ Repository = "https://github.com/COO-Utilities/camera-daemon"
 dev = ["pylint", "pytest"]
 
 [tool.setuptools]
-packages = ["camera_daemon"]
+packages = ["camera_daemon", "camera_daemon.archon"]

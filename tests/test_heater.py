@@ -8,7 +8,7 @@ import logging
 
 import pytest
 
-from camera_daemon.heater import HeaterService
+from camera_daemon.archon.heater import HeaterService
 
 # A bare heater read answers with the enable state and the target together,
 # and the controller pads its replies

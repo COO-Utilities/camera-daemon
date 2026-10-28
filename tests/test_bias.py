@@ -8,8 +8,8 @@ import logging
 
 import pytest
 
-from camera_daemon.bias import BiasService
-from camera_daemon.heater import HeaterService
+from camera_daemon.archon.bias import BiasService
+from camera_daemon.archon.heater import HeaterService
 
 # What a bank with every attribute answers, and one with only a voltage
 HVHC_REPLY = 'MOD4 chan 25 LVHC V=5.0 ORDER=0 ENABLE=1 IL=40.0 LABEL="CCD +5V"'
